@@ -1,45 +1,28 @@
-# Gii beego 快速自动化生成代码
-
-## 1.简单介绍
-Gii 是一个为了协助快速开发 beego 项目而创建的项目，类似于PHP yii框架中的 Gii，通过 Gii 您可以很容易地为你已存在的数据表在你指定的目录创建 Model 以及 Controller 。它基于 beego 为你写好created ,update,put,已及 delete 等操作方法。
-
-> 注意不能完全依靠 Gii 为你生成的东西，需要检查下。
-
-## 2.安装
-您可以通过如下的方式安装 bee 工具：
-```
-go get  github.com/githubw2015/go-gii
-```
-
-##3.如何使用
-```
-package main
+package gii
 
 import (
-	"github.com/githubw2015/go-gii"
+	"bufio"
+	"fmt"
+	"os"
+	"strings"
 )
 
-func main() {
+func createController(op Options) {
 
-	source := "xxxx:xxxxxxxx@tcp(127.0.0.1)/abc"
-	gii.Column(source,"article","")
+	op.name = strings.Title(op.name)
+	content := `package `
+	if op.namespace == "" {
+		content += `controllers`
+	} else {
+		content += op.namespace
+	}
 
-	//beego.Run()
-}
-```
+	if op.modelsNamespace == "" {
+		op.modelsNamespace = "models"
+	}
+	controllerName := op.modelsNamespace + `.` + op.name
 
-
-##参数介绍
-1. 第一个参数 source :数据库连接信息
-2. 第二个参数 name 数据表名称
-3. 第三个参数 controllerPath 是指定 Controller 生成的路径
-
-> 直接执行这个文件后会在 beego 项目的目录的 models下生成对应数据表的 model,在 controller 下的指定路径生成控制器
-
-##Controller ```article.go```代码
-
-```
-package home
+	content += `
 
 import (
 	"github.com/astaxie/beego"
@@ -47,11 +30,11 @@ import (
 	"github.com/astaxie/beego/validation"
 )
 
-type ArticleController struct {
+type ` + op.name + `Controller struct {
 	beego.Controller
 }
 
-func (c *ArticleController) List() {
+func (c *` + op.name + `Controller) List() {
 
 
 	limit, _ := beego.AppConfig.Int64("limit") // 一页的数量
@@ -59,9 +42,9 @@ func (c *ArticleController) List() {
 	offset := (page - 1) * limit               // 偏移量
 
 	o := orm.NewOrm()
-	obj := new(models.Article)
+	obj := new(` + controllerName + `)
 
-	var data []*models.Article
+	var data []*` + controllerName + `
 	qs := o.QueryTable(obj)
 
 	// 获取数据
@@ -88,7 +71,7 @@ func (c *ArticleController) List() {
 	c.Data["Page"] = page
 }
 
-func (c *ArticleController) Put() {
+func (c *` + op.name + `Controller) Put() {
 	id, err := c.GetInt("id", 0)
 
 	if id == 0 {
@@ -97,8 +80,8 @@ func (c *ArticleController) Put() {
 
 	// 基础数据
 	o := orm.NewOrm()
-	obj := new(models.Article)
-	var data []*models.Article
+	obj := new(` + controllerName + `)
+	var data []*` + controllerName + `
 	qs := o.QueryTable(obj)
 	err = qs.Filter("id", id).One(&data)
 	if err != nil {
@@ -108,7 +91,7 @@ func (c *ArticleController) Put() {
 
 }
 
-func (c *ArticleController) Update() {
+func (c *` + op.name + `Controller) Update() {
 
 	id, _ := c.GetInt("id", 0)
 
@@ -121,7 +104,7 @@ func (c *ArticleController) Update() {
 
 	o := orm.NewOrm()
 
-	obj := models.Article{Id: id}
+	obj := ` + controllerName + `{Id: id}
 	if o.Read(&obj) == nil {
 		// 需要补充修改的信息
 		// 如 ：obj.Reply = reply
@@ -165,13 +148,13 @@ func (c *ArticleController) Update() {
 	c.StopRun()
 }
 
-func (c *ArticleController) Delete() {
+func (c *` + op.name + `Controller) Delete() {
 	id, _ := c.GetInt("id", 0)
 
 	response := make(map[string]interface{})
 
 	o := orm.NewOrm()
-	obj := models.Article{Id: id}
+	obj := ` + controllerName + `{Id: id}
 
 	if _, err := o.Delete(&obj); err == nil {
 		response["msg"] = "删除成功！"
@@ -185,38 +168,23 @@ func (c *ArticleController) Delete() {
 	c.Data["json"] = response
 	c.ServeJSON()
 	c.StopRun()
+}`
+
+	dir, _ := os.Getwd()
+	if op.path == "" {
+		op.path = "/controllers"
+	}
+	path := dir + op.path + `/` + strings.ToLower(op.name) + ".go"
+
+	outputFile, outputError := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0666)
+	if outputError != nil {
+		fmt.Printf("An error occurred with file opening or creation\n")
+		return
+	}
+	defer outputFile.Close()
+
+	outputWriter := bufio.NewWriter(outputFile)
+	outputWriter.WriteString(content)
+	outputWriter.Flush()
+
 }
-```
-
-
-
-##Model Article.go 代码
-```
-package models
-
-import (
-	"github.com/astaxie/beego/orm"
-    "time"
-)
-
-type Article struct {
-	Id			int
-	Title			string
-	BusinessType			string
-	BusinessName			string
-	DemandType			string
-	Province			string
-	City			string
-	District			string
-	Address			string
-	Content			string		`orm:"type(text)"`
-	PublisherId			float64
-	PublishDate			time.Time		`orm:"type(datetime)"`
-	Created			time.Time		`orm:"auto_now_add;type(datetime)"`
-}
-
-func init() {
-	// 需要在init中注册定义的model
-	orm.RegisterModel(new(Article))
-}
-```
